@@ -1,6 +1,6 @@
 // src/pages/EventDetails.jsx
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, Link } from "react-router";
 import { useSelector, useDispatch } from "react-redux";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -12,6 +12,8 @@ const EventDetails = () => {
   const dispatch = useDispatch();
 
   const [event, setEvent] = useState(null);
+  const [fetching, setFetching] = useState(true); // Track initial data fetch
+  const [notFound, setNotFound] = useState(false); // Track if event is deleted
 
   const { user } = useSelector((state) => state.auth);
   const { loading, error, bookingSuccess } = useSelector(
@@ -21,10 +23,23 @@ const EventDetails = () => {
 
   useEffect(() => {
     const fetchEvent = async () => {
-      const docRef = doc(db, "events", id);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setEvent({ id: docSnap.id, ...docSnap.data() });
+      setFetching(true);
+      try {
+        const docRef = doc(db, "events", id);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          setEvent({ id: docSnap.id, ...docSnap.data() });
+          setNotFound(false);
+        } else {
+          // Event was deleted by organizer
+          setNotFound(true);
+        }
+      } catch (err) {
+        console.error("Error fetching event:", err);
+        setNotFound(true);
+      } finally {
+        setFetching(false);
       }
     };
     fetchEvent();
@@ -57,18 +72,44 @@ const EventDetails = () => {
     }
   }, [bookingSuccess, navigate, dispatch]);
 
-  if (!event)
+  // 1. Loading State
+  if (fetching)
     return (
       <div className="flex justify-center items-center min-h-[50vh]">
-        <div className="text-gray-500 font-bold">Loading Event Details...</div>
+        <div className="text-gray-500 font-bold animate-pulse">
+          Loading Event Details...
+        </div>
       </div>
     );
 
+  // 2. Event Deleted / Not Found State (PREVENTS CRASH)
+  if (notFound || !event) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh] p-4">
+        <div className="text-center max-w-md bg-white p-8 rounded-xl border border-gray-300">
+          <div className="text-5xl mb-4">🚫</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+            Event Not Found
+          </h2>
+          <p className="text-gray-600 mb-6">
+            This event may have been cancelled or removed by the organizer.
+          </p>
+          <Link
+            to="/"
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700"
+          >
+            Browse Other Events
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Logic for Active Event ---
   const isSoldOut = event.bookedTickets >= event.totalTickets;
   const availableSeats = event.totalTickets - event.bookedTickets;
 
-  // 1. CHECK IF EVENT IS EXPIRED
-  // We set time to 00:00:00 so if the event is today, it is NOT expired.
+  // Check Expiry
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const eventDate = new Date(event.date);
@@ -79,7 +120,7 @@ const EventDetails = () => {
       <div className="w-full max-w-4xl bg-white rounded-xl border border-gray-300 overflow-hidden flex flex-col md:flex-row shadow-sm">
         <div className="w-full h-56 md:h-auto md:w-5/12 relative bg-gray-100">
           <img
-            src={event.image}
+            src={event.image || "https://via.placeholder.com/400x300"}
             alt={event.title}
             className="w-full h-full object-cover"
           />
@@ -149,7 +190,7 @@ const EventDetails = () => {
             {!isOrganizer && (
               <button
                 onClick={handleBooking}
-                disabled={isSoldOut || loading || isExpired} // 2. DISABLE IF EXPIRED
+                disabled={isSoldOut || loading || isExpired}
                 className={`w-full rounded-lg font-bold transition-colors cursor-pointer
                 py-2.5 text-base md:py-3 md:text-lg
                 ${
@@ -158,7 +199,6 @@ const EventDetails = () => {
                     : "bg-blue-600 text-white hover:bg-blue-700 border border-blue-600"
                 }`}
               >
-                {/* 3. CHANGE TEXT IF EXPIRED */}
                 {loading
                   ? "Processing..."
                   : isExpired

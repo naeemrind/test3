@@ -18,21 +18,35 @@ const MyTickets = () => {
     }
   }, [dispatch, user]);
 
-  // --- SORTING HELPER ---
-  // Sorts tickets by Date (Newest first)
+  // --- SORTING HELPER (CRASH FIX) ---
   const sortTicketsDesc = (tickets) => {
+    // Safety check: if tickets is null/undefined, return empty array
+    if (!tickets) return [];
+
     return [...tickets].sort((a, b) => {
-      // Combine date and time for accurate sorting
-      // Assuming eventDate is "YYYY-MM-DD" and eventTime is "HH:MM"
-      const dateA = new Date(`${a.eventDate}T${a.eventTime || "00:00"}`);
-      const dateB = new Date(`${b.eventDate}T${b.eventTime || "00:00"}`);
+      // 1. Safety: Check if eventDate exists using Optional Chaining
+      const dateStrA = a?.eventDate;
+      const dateStrB = b?.eventDate;
+
+      // 2. If date is missing (deleted/orphan event), move it to the bottom
+      if (!dateStrA) return 1;
+      if (!dateStrB) return -1;
+
+      // 3. Combine date and time safely
+      const timeA = a?.eventTime || "00:00";
+      const timeB = b?.eventTime || "00:00";
+
+      const dateA = new Date(`${dateStrA}T${timeA}`);
+      const dateB = new Date(`${dateStrB}T${timeB}`);
+
       return dateB - dateA; // Descending order
     });
   };
 
-  // 1. Filter tickets by status
-  const rawActiveTickets = userTickets.filter((t) => t.status === "valid");
-  const rawUsedTickets = userTickets.filter((t) => t.status === "used");
+  // 1. Filter tickets by status safely
+  const rawActiveTickets =
+    userTickets?.filter((t) => t.status === "valid") || [];
+  const rawUsedTickets = userTickets?.filter((t) => t.status === "used") || [];
 
   // 2. Sort them
   const activeTickets = sortTicketsDesc(rawActiveTickets);
