@@ -62,7 +62,7 @@ const EventCard = ({ event }) => {
             to={`/event/${event.id}`}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
           >
-            Get Tickets
+            Details
           </Link>
         </div>
       </div>

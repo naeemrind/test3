@@ -13,6 +13,21 @@ const Home = () => {
     dispatch(fetchEvents());
   }, [dispatch]);
 
+  // --- SAFETY SORTING LOGIC ---
+  const sortedEvents = [...(events || [])].sort((a, b) => {
+    // Helper to extract a sortable number from various formats
+    const getTime = (dateField) => {
+      if (!dateField) return 0; // Safety for null/undefined
+      // Check if it's a Firebase Timestamp (has .seconds)
+      if (dateField.seconds) return dateField.seconds * 1000;
+      // Otherwise, try to parse it as a standard Date
+      return new Date(dateField).getTime() || 0;
+    };
+
+    // Sort Latest to Oldest (Descending)
+    return getTime(b.createdAt) - getTime(a.createdAt);
+  });
+
   return (
     <div className="min-h-[calc(100vh-110px)] bg-gray-50 flex flex-col items-center py-5 pt-16 px-4">
       {/* 1. HERO / INTRODUCTION SECTION */}
@@ -36,14 +51,15 @@ const Home = () => {
           </div>
         ) : (
           <>
-            {events.length > 0 ? (
+            {sortedEvents.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {events?.map((event) => (
-                  <EventCard key={event.id} event={event} />
+                {sortedEvents.map((event) => (
+                  // Using optional chaining just in case id is missing
+                  <EventCard key={event?.id || Math.random()} event={event} />
                 ))}
               </div>
             ) : (
-              /* Empty State - Centered and Clean */
+              /* Empty State */
               <div className="text-center py-6 bg-white rounded-xl border border-gray-200 max-w-md mx-auto">
                 <div className="text-6xl mb-4">📅</div>
                 <h3 className="text-xl font-bold text-gray-800 mb-2">
@@ -53,7 +69,7 @@ const Home = () => {
                   There are currently no upcoming events scheduled in Quetta.
                   Please check back later!
                 </p>
-                {user && user.role === "organizer" && (
+                {user?.role === "organizer" && (
                   <Link
                     to="/dashboard"
                     className="inline-block mt-6 text-blue-600 font-bold hover:underline"
