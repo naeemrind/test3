@@ -194,7 +194,7 @@ const Dashboard = () => {
       createdAt: new Date().toISOString(),
     };
 
-    await dispatch(createEvent(eventData));
+    dispatch(createEvent(eventData));
     alert("Event Created Successfully!");
     setFormData({
       title: "",
@@ -235,6 +235,16 @@ const Dashboard = () => {
 
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <p className="text-gray-500 font-bold animate-pulse">
+          LOADING PROFILE...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
