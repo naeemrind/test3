@@ -1,4 +1,3 @@
-// src/pages/Dashboard.jsx
 import { useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -12,13 +11,15 @@ import AttendeeModal from "../components/AttendeeModal";
 
 const Dashboard = () => {
   const dispatch = useDispatch();
-  const { user } = useSelector((state) => state.auth);
-  const { list: myEvents } = useSelector((state) => state.events);
+
+  // Safety: Use default values to prevent "cannot read property of undefined"
+  const { user } = useSelector((state) => state.auth || {});
+  const { list: myEvents = [] } = useSelector((state) => state.events || {});
   const {
-    loading: ticketLoading,
-    error: ticketError,
-    validationMsg,
-  } = useSelector((state) => state.bookings);
+    loading: ticketLoading = false,
+    error: ticketError = null,
+    validationMsg = null,
+  } = useSelector((state) => state.bookings || {});
 
   // --- CONFIGURATION ---
   const CLOUD_NAME = "dgmxjkpp2";
@@ -51,13 +52,14 @@ const Dashboard = () => {
   // --- GET TODAY'S DATE (YYYY-MM-DD) ---
   const todayStr = new Date().toISOString().split("T")[0];
 
+  // Fetch Events when tab changes to "list"
   useEffect(() => {
-    if (activeTab === "list" && user) {
+    if (activeTab === "list" && user?.uid) {
       dispatch(fetchOrganizerEvents(user.uid));
     }
-  }, [activeTab, user, dispatch]);
+  }, [activeTab, user?.uid, dispatch]);
 
-  // --- SCANNER LOGIC (Unchanged) ---
+  // --- SCANNER LOGIC ---
   const stopScanner = async () => {
     if (scannerInstanceRef.current && scannerInstanceRef.current.isScanning) {
       try {
@@ -78,6 +80,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    let html5QrCode;
     if (
       showScanner &&
       activeTab === "validate" &&
@@ -85,8 +88,9 @@ const Dashboard = () => {
       !ticketError &&
       !isProcessing
     ) {
-      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode = new Html5Qrcode("reader");
       scannerInstanceRef.current = html5QrCode;
+
       const config = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
@@ -100,26 +104,30 @@ const Dashboard = () => {
           async (decodedText) => {
             setIsProcessing(true);
             setTicketId(decodedText);
+
             if (scannerInstanceRef.current) {
-              await scannerInstanceRef.current.stop();
+              await scannerInstanceRef.current.stop().catch(() => {});
               scannerInstanceRef.current = null;
             }
+
             dispatch(clearValidationMsg());
             dispatch(
-              validateTicket({ ticketId: decodedText, organizerId: user.uid }),
+              validateTicket({ ticketId: decodedText, organizerId: user?.uid }),
             );
             if (navigator.vibrate) navigator.vibrate(100);
           },
-          () => {},
+          () => {}, // Silent failure for frame-by-frame scanning
         )
         .catch((err) => {
           console.error("Scanner Error:", err);
           setShowScanner(false);
         });
     }
+
     return () => {
-      if (scannerInstanceRef.current)
-        scannerInstanceRef.current.stop().catch(() => {});
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().catch(() => {});
+      }
     };
   }, [
     showScanner,
@@ -128,12 +136,12 @@ const Dashboard = () => {
     ticketError,
     isProcessing,
     dispatch,
-    user.uid,
+    user?.uid,
   ]);
 
   // --- HANDLERS ---
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
       setImageFile(file);
       setImagePreview(URL.createObjectURL(file));
@@ -143,11 +151,13 @@ const Dashboard = () => {
   const uploadToCloudinary = async () => {
     if (!imageFile)
       return "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1000";
+
     setIsUploading(true);
     const data = new FormData();
     data.append("file", imageFile);
     data.append("upload_preset", UPLOAD_PRESET);
     data.append("cloud_name", CLOUD_NAME);
+
     try {
       const res = await fetch(
         `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
@@ -155,7 +165,10 @@ const Dashboard = () => {
       );
       const uploadedImage = await res.json();
       setIsUploading(false);
-      return uploadedImage.secure_url;
+      return (
+        uploadedImage.secure_url ||
+        "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1000"
+      );
     } catch (error) {
       setIsUploading(false);
       return "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1000";
@@ -165,7 +178,6 @@ const Dashboard = () => {
   const handleCreateEvent = async (e) => {
     e.preventDefault();
 
-    // 1. DATE CHECK: Prevent creating past events
     if (formData.date < todayStr) {
       alert("You cannot schedule an event in the past!");
       return;
@@ -178,9 +190,10 @@ const Dashboard = () => {
       price: Number(formData.price),
       totalTickets: Number(formData.totalTickets),
       bookedTickets: 0,
-      organizerId: user.uid,
+      organizerId: user?.uid,
       createdAt: new Date().toISOString(),
     };
+
     await dispatch(createEvent(eventData));
     alert("Event Created Successfully!");
     setFormData({
@@ -214,7 +227,7 @@ const Dashboard = () => {
 
   const handleManualValidate = (e) => {
     if (e) e.preventDefault();
-    if (!ticketId) return;
+    if (!ticketId || !user?.uid) return;
     setIsProcessing(true);
     dispatch(clearValidationMsg());
     dispatch(validateTicket({ ticketId, organizerId: user.uid }));
@@ -247,13 +260,13 @@ const Dashboard = () => {
               setActiveTab("create");
               stopScanner();
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border ${activeTab === "create" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50 cursor-pointer"}`}
+            className={`px-4 py-2 rounded-lg text-sm font-bold border ${activeTab === "create" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-300 cursor-pointer"}`}
           >
             Create Event
           </button>
           <button
             onClick={() => setActiveTab("validate")}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border ${activeTab === "validate" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50 cursor-pointer"}`}
+            className={`px-4 py-2 rounded-lg text-sm font-bold border ${activeTab === "validate" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-300 cursor-pointer"}`}
           >
             Scan Tickets
           </button>
@@ -262,7 +275,7 @@ const Dashboard = () => {
               setActiveTab("list");
               stopScanner();
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-bold border ${activeTab === "list" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50 cursor-pointer"}`}
+            className={`px-4 py-2 rounded-lg text-sm font-bold border ${activeTab === "list" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-300 cursor-pointer"}`}
           >
             My Events
           </button>
@@ -283,7 +296,7 @@ const Dashboard = () => {
                   name="title"
                   value={formData.title}
                   required
-                  className="w-full p-3 bg-white border border-gray-300 rounded-lg focus:border-blue-500 outline-none"
+                  className="w-full p-3 border border-gray-300 rounded-lg outline-none"
                   onChange={handleChange}
                   placeholder="Event Name"
                 />
@@ -296,7 +309,7 @@ const Dashboard = () => {
                   name="location"
                   value={formData.location}
                   required
-                  className="w-full p-3 bg-white border border-gray-300 rounded-lg focus:border-blue-500 outline-none"
+                  className="w-full p-3 border border-gray-300 rounded-lg outline-none"
                   onChange={handleChange}
                   placeholder="Venue Name & Address"
                 />
@@ -306,14 +319,13 @@ const Dashboard = () => {
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
                     Date
                   </label>
-                  {/* 2. DATE INPUT MIN ATTRIBUTE */}
                   <input
                     name="date"
                     type="date"
                     min={todayStr}
                     value={formData.date}
                     required
-                    className="w-full p-3 bg-white border border-gray-300 rounded-lg outline-none"
+                    className="w-full p-3 border border-gray-300 rounded-lg outline-none"
                     onChange={handleChange}
                   />
                 </div>
@@ -326,7 +338,7 @@ const Dashboard = () => {
                     type="time"
                     value={formData.time}
                     required
-                    className="w-full p-3 bg-white border border-gray-300 rounded-lg outline-none"
+                    className="w-full p-3 border border-gray-300 rounded-lg outline-none"
                     onChange={handleChange}
                   />
                 </div>
@@ -341,7 +353,7 @@ const Dashboard = () => {
                     type="number"
                     value={formData.price}
                     required
-                    className="w-full p-3 bg-white border border-gray-300 rounded-lg outline-none"
+                    className="w-full p-3 border border-gray-300 rounded-lg outline-none"
                     onChange={handleChange}
                   />
                 </div>
@@ -354,7 +366,7 @@ const Dashboard = () => {
                     type="number"
                     value={formData.totalTickets}
                     required
-                    className="w-full p-3 bg-white border border-gray-300 rounded-lg outline-none"
+                    className="w-full p-3 border border-gray-300 rounded-lg outline-none"
                     onChange={handleChange}
                   />
                 </div>
@@ -368,7 +380,7 @@ const Dashboard = () => {
                   value={formData.description}
                   required
                   rows="3"
-                  className="w-full p-3 bg-white border border-gray-300 rounded-lg outline-none"
+                  className="w-full p-3 border border-gray-300 rounded-lg outline-none"
                   onChange={handleChange}
                 ></textarea>
               </div>
@@ -378,7 +390,6 @@ const Dashboard = () => {
                   accept="image/*"
                   onChange={handleImageChange}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  id="imageUpload"
                 />
                 {imagePreview ? (
                   <img
@@ -395,7 +406,7 @@ const Dashboard = () => {
               <button
                 type="submit"
                 disabled={isUploading}
-                className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 cursor-pointer"
+                className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700"
               >
                 {isUploading ? "UPLOADING..." : "PUBLISH EVENT"}
               </button>
@@ -473,13 +484,13 @@ const Dashboard = () => {
                   <input
                     type="text"
                     placeholder="ENTER TICKET ID"
-                    className="flex-1 p-3 bg-gray-50 rounded-lg font-mono text-sm border border-gray-300 focus:border-blue-500 outline-none"
+                    className="flex-1 p-3 bg-gray-50 rounded-lg font-mono text-sm border border-gray-300 outline-none"
                     value={ticketId}
                     onChange={(e) => setTicketId(e.target.value)}
                   />
                   <button
                     disabled={ticketLoading || !ticketId}
-                    className="bg-gray-800 text-white px-4 rounded-lg font-bold uppercase text-xs hover:bg-gray-700"
+                    className="bg-gray-800 text-white px-4 rounded-lg font-bold uppercase text-xs"
                   >
                     Verify
                   </button>
@@ -498,7 +509,16 @@ const Dashboard = () => {
               </p>
             ) : (
               [...myEvents]
-                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                .sort((a, b) => {
+                  // Safety: Handle missing createdAt field
+                  const timeA = a.createdAt
+                    ? new Date(a.createdAt).getTime()
+                    : 0;
+                  const timeB = b.createdAt
+                    ? new Date(b.createdAt).getTime()
+                    : 0;
+                  return timeB - timeA;
+                })
                 .map((event) => (
                   <div
                     key={event.id}
@@ -506,23 +526,23 @@ const Dashboard = () => {
                   >
                     <div className="flex items-center gap-4 flex-1">
                       <img
-                        src={event.image}
+                        src={event?.image || "https://via.placeholder.com/64"}
                         alt="ev"
                         className="w-16 h-16 object-cover rounded-lg bg-gray-200"
                       />
                       <div className="flex-1">
                         <h3 className="font-bold text-gray-800 uppercase text-xs">
-                          {event.title}
+                          {event?.title || "Untitled"}
                         </h3>
                         <p className="text-gray-500 text-[10px] font-bold uppercase">
-                          {event.date}
+                          {event?.date || "No Date"}
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                           <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden max-w-38">
                             <div
                               className="bg-blue-600 h-full"
                               style={{
-                                width: `${(event.bookedTickets / event.totalTickets) * 100}%`,
+                                width: `${Math.min(100, (event.bookedTickets / event.totalTickets) * 100)}%`,
                               }}
                             ></div>
                           </div>
@@ -535,14 +555,13 @@ const Dashboard = () => {
                     <div className="flex items-center gap-2 justify-end mt-2 sm:mt-0">
                       <button
                         onClick={() => setSelectedEvent(event)}
-                        className="flex items-center gap-1 bg-zinc-100 hover:bg-zinc-700 text-gray-700 hover:text-white mr-2 px-3 py-2 rounded-lg font-bold uppercase transition-colors text-xs cursor-pointer"
+                        className="bg-zinc-100 hover:bg-zinc-700 text-gray-700 hover:text-white px-3 py-2 rounded-lg font-bold uppercase text-xs transition-colors"
                       >
                         Attendees
                       </button>
                       <button
                         onClick={() => handleDeleteEvent(event.id)}
-                        className="bg-red-50 text-red-600 p-2 rounded-lg border border-red-100 hover:bg-red-100 text-xs cursor-pointer"
-                        title="Delete Event"
+                        className="bg-red-50 text-red-600 p-2 rounded-lg border border-red-100 hover:bg-red-100 text-xs"
                       >
                         Delete
                       </button>
