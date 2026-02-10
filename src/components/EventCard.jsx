@@ -1,27 +1,32 @@
 import { Link } from "react-router";
 
 const EventCard = ({ event }) => {
-  // Format Date: 2026-02-12 -> 12 Feb 2026
-  const formattedDate = event.date
-    ? new Date(event.date).toLocaleDateString("en-PK", {
+  // Safe Date Formatting
+  const eventDate = event?.date ? new Date(event.date) : null;
+  const isDateValid = eventDate && !isNaN(eventDate.getTime());
+
+  const formattedDate = isDateValid
+    ? eventDate.toLocaleDateString("en-PK", {
         day: "numeric",
         month: "short",
         year: "numeric",
       })
-    : "N/A";
+    : "Date N/A";
 
-  // Format Time: 18:00 -> 6:00 PM
-  const timeDate = event.time ? new Date(`1970-01-01T${event.time}`) : null;
-  const formattedTime =
-    timeDate && !isNaN(timeDate.getTime())
-      ? timeDate
-          .toLocaleTimeString("en-PK", {
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: true,
-          })
-          .toUpperCase()
-      : "N/A";
+  // Safe Time Formatting (The Crash Fix)
+  let formattedTime = "Time N/A";
+  if (event?.time) {
+    const timeDate = new Date(`1970-01-01T${event.time}`);
+    if (!isNaN(timeDate.getTime())) {
+      formattedTime = timeDate
+        .toLocaleTimeString("en-PK", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })
+        .toUpperCase();
+    }
+  }
   return (
     <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
       <img
