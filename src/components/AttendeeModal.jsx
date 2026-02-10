@@ -60,7 +60,7 @@ const AttendeeModal = ({ eventId, eventTitle, onClose }) => {
                     <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
                       Ticket ID
                     </th>
-                    <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
+                    <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center min-w-32">
                       Status
                     </th>
                   </tr>
@@ -83,7 +83,7 @@ const AttendeeModal = ({ eventId, eventTitle, onClose }) => {
                       <td className="p-4 text-xs font-mono text-gray-500">
                         {attendee.id}
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="p-4 text-center w-fit">
                         <span
                           className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
                             attendee.status === "valid"
