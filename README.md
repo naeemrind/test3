@@ -61,9 +61,7 @@ Here is what the application can do, broken down by user roles:
 - **Html5-QRCode:** Allows the browser to use the camera for scanning tickets.
 
 ### **Credentials for Testing**
-**Organizer:** 
-email: admin@ems.com
-password: admin123
+
 
 **Attendee**
 email: amjad@ems.com
