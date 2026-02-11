@@ -48,15 +48,28 @@ const Dashboard = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const scannerInstanceRef = useRef(null);
+  const [isListLoading, setIsListLoading] = useState(false);
 
   // --- GET TODAY'S DATE (YYYY-MM-DD) ---
   const todayStr = new Date().toISOString().split("T")[0];
 
   // Fetch Events when tab changes to "list"
   useEffect(() => {
-    if (activeTab === "list" && user?.uid) {
-      dispatch(fetchOrganizerEvents(user.uid));
-    }
+    const loadEvents = async () => {
+      if (activeTab === "list" && user?.uid) {
+        setIsListLoading(true); // Start loading
+        try {
+          // We use .unwrap() or just await the dispatch to ensure it's finished
+          await dispatch(fetchOrganizerEvents(user.uid));
+        } catch (error) {
+          console.error("Failed to load events", error);
+        } finally {
+          setIsListLoading(false); // Stop loading regardless of success or failure
+        }
+      }
+    };
+
+    loadEvents();
   }, [activeTab, user?.uid, dispatch]);
 
   // --- SCANNER LOGIC ---
@@ -517,19 +530,19 @@ const Dashboard = () => {
         {/* --- TAB: MY EVENTS --- */}
         {activeTab === "list" && (
           <div className="grid grid-cols-1 gap-4">
-            {myEvents.length === 0 ? (
+            {isListLoading ? (
+              <p className="text-center py-10 text-blue-600 font-bold animate-pulse uppercase">
+                Fetching Events...
+              </p>
+            ) : myEvents.length === 0 ? (
               <p className="text-center py-10 text-gray-500 font-bold uppercase">
                 No Events Found
               </p>
             ) : (
               [...myEvents]
                 .sort((a, b) => {
-                  // 1. Convert date strings to numeric timestamps for comparison
-                  // We use optional chaining (?.) and a fallback ('0') to prevent crashes
                   const timeA = new Date(a?.date || 0).getTime();
                   const timeB = new Date(b?.date || 0).getTime();
-
-                  // 2. Subtract A from B for "Latest to Oldest" (Descending)
                   return timeB - timeA;
                 })
                 .map((event) => (
